@@ -108,10 +108,10 @@ type Config struct {
 
 type ExtraConfig struct {
 	// FtQueryStringFn specifies a function to get ftQuery string
-	FtQueryStringFn func(sqlparser.Statement) string
+	FtQueryStringFn func(sqlparser.Statement, *sqlparser.TableName) string
 
 	// StQueryStringFn specifies a function to get stQuery string
-	StQueryStringFn func(sqlparser.Statement) string
+	StQueryStringFn func(sqlparser.Statement, *sqlparser.TableName) string
 }
 
 func Register(config Config, tables ...any) *Sharding {
@@ -446,40 +446,40 @@ func (s *Sharding) resolve(query string, args ...any) (ftQuery, stQuery, tableNa
 
 		switch stmt := expr.(type) {
 		case *sqlparser.SelectStatement:
-			ftQuery = s.doGetFtQuery(stmt)
+			ftQuery = s.doGetFtQuery(stmt, newTable)
 			stmt.FromItems = newTable
 			stmt.OrderBy = replaceOrderByTableName(stmt.OrderBy, tableName, newTable.Name.Name)
-			stQuery = s.doGetStQuery(stmt)
+			stQuery = s.doGetStQuery(stmt, newTable)
 		case *sqlparser.UpdateStatement:
-			ftQuery = s.doGetFtQuery(stmt)
+			ftQuery = s.doGetFtQuery(stmt, newTable)
 			stmt.TableName = newTable
-			stQuery = s.doGetStQuery(stmt)
+			stQuery = s.doGetStQuery(stmt, newTable)
 		case *sqlparser.DeleteStatement:
-			ftQuery = s.doGetFtQuery(stmt)
+			ftQuery = s.doGetFtQuery(stmt, newTable)
 			stmt.TableName = newTable
-			stQuery = s.doGetStQuery(stmt)
+			stQuery = s.doGetStQuery(stmt, newTable)
 		}
 	}
 
 	return
 }
 
-func (s *Sharding) doGetFtQuery(stmt sqlparser.Statement) string {
+func (s *Sharding) doGetFtQuery(stmt sqlparser.Statement, tableName *sqlparser.TableName) string {
 	extra := s._config.Extra
 	if extra == nil || extra.FtQueryStringFn == nil {
 		return stmt.String()
 	}
 
-	return extra.FtQueryStringFn(stmt)
+	return extra.FtQueryStringFn(stmt, tableName)
 }
 
-func (s *Sharding) doGetStQuery(stmt sqlparser.Statement) string {
+func (s *Sharding) doGetStQuery(stmt sqlparser.Statement, tableName *sqlparser.TableName) string {
 	extra := s._config.Extra
 	if extra == nil || extra.StQueryStringFn == nil {
 		return stmt.String()
 	}
 
-	return extra.StQueryStringFn(stmt)
+	return extra.StQueryStringFn(stmt, tableName)
 }
 
 func getSuffix(value any, id int64, keyFind bool, r Config) (suffix string, err error) {
