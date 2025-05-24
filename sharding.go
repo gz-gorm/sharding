@@ -101,6 +101,17 @@ type Config struct {
 	//		return nodes[tableIdx].Generate().Int64()
 	//	}
 	PrimaryKeyGeneratorFn func(tableIdx int64) int64
+
+	// Extra extra config
+	Extra *ExtraConfig
+}
+
+type ExtraConfig struct {
+	// FtQueryStringFn specifies a function to get ftQuery string
+	FtQueryStringFn func(sqlparser.Statement) string
+
+	// StQueryStringFn specifies a function to get stQuery string
+	StQueryStringFn func(sqlparser.Statement) string
 }
 
 func Register(config Config, tables ...any) *Sharding {
@@ -435,22 +446,40 @@ func (s *Sharding) resolve(query string, args ...any) (ftQuery, stQuery, tableNa
 
 		switch stmt := expr.(type) {
 		case *sqlparser.SelectStatement:
-			ftQuery = stmt.String()
+			ftQuery = s.doGetFtQuery(stmt)
 			stmt.FromItems = newTable
 			stmt.OrderBy = replaceOrderByTableName(stmt.OrderBy, tableName, newTable.Name.Name)
-			stQuery = stmt.String()
+			stQuery = s.doGetStQuery(stmt)
 		case *sqlparser.UpdateStatement:
-			ftQuery = stmt.String()
+			ftQuery = s.doGetFtQuery(stmt)
 			stmt.TableName = newTable
-			stQuery = stmt.String()
+			stQuery = s.doGetStQuery(stmt)
 		case *sqlparser.DeleteStatement:
-			ftQuery = stmt.String()
+			ftQuery = s.doGetFtQuery(stmt)
 			stmt.TableName = newTable
-			stQuery = stmt.String()
+			stQuery = s.doGetStQuery(stmt)
 		}
 	}
 
 	return
+}
+
+func (s *Sharding) doGetFtQuery(stmt sqlparser.Statement) string {
+	extra := s._config.Extra
+	if extra == nil || extra.FtQueryStringFn == nil {
+		return stmt.String()
+	}
+
+	return extra.FtQueryStringFn(stmt)
+}
+
+func (s *Sharding) doGetStQuery(stmt sqlparser.Statement) string {
+	extra := s._config.Extra
+	if extra == nil || extra.StQueryStringFn == nil {
+		return stmt.String()
+	}
+
+	return extra.StQueryStringFn(stmt)
 }
 
 func getSuffix(value any, id int64, keyFind bool, r Config) (suffix string, err error) {
